@@ -33,3 +33,9 @@ npm start
 会话加密保存在本机运行目录，仓库和安装包不含账号数据。`session.enc` 和 `session.key` 均不应分享。
 
 [项目结构与运行流程](docs/ARCHITECTURE.md) · [版本记录](CHANGELOG.md) · [第三方来源](THIRD_PARTY.md)
+
+## 许可证
+
+本项目代码采用 [GNU GPL 3.0](LICENSE)（`GPL-3.0-only`）。Copyright (C) 2026 liuayueeryuan0313。
+
+第三方依赖和图标保留各自的许可证与权利，见 [THIRD_PARTY.md](THIRD_PARTY.md)。
