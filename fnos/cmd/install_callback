@@ -1,0 +1,7 @@
+#!/bin/bash
+set -eu
+chmod 755 "${TRIM_APPDEST}/runtime/bin/node"
+mkdir -p "${TRIM_PKGVAR}/data"
+chmod 700 "${TRIM_PKGVAR}/data"
+# No credentials or progress are created by installation.
+exit 0

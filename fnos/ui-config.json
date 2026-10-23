@@ -1,0 +1,15 @@
+{
+  ".url": {
+    "chaoxing-study-native.main": {
+      "title": "超星学习控制台",
+      "icon": "images/chaoxing_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/chaoxing-study-native",
+      "gatewaySocket": "app.sock",
+      "url": "/app/chaoxing-study-native/",
+      "allUsers": true,
+      "control": { "accessPerm": "editable" }
+    }
+  }
+}

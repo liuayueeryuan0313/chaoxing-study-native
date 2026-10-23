@@ -1,0 +1,15 @@
+appname               = chaoxing-study-native
+version               = 0.2.8
+display_name          = 超星学习控制台
+desc                  = 无浏览器的学习任务控制台，支持飞牛多用户独立扫码、选课、实时进度和断点续接。
+platform              = arm
+source                = thirdparty
+maintainer            = Local Project
+distributor           = Local Project
+desktop_uidir         = ui
+desktop_applaunchname = chaoxing-study-native.main
+os_min_version        = 1.1.3100
+ctl_stop              = true
+checkport             = false
+disable_authorization_path = true
+changelog             = 修复完整视频带结束时间被误判为片段；修复失败或停止后任务残留运行中，保留验证码续接、自动扫描和多用户隔离。

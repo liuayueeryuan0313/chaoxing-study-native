@@ -1,0 +1,5 @@
+{
+  "defaults": { "run-as": "package" },
+  "username": "chaoxing-study-native",
+  "groupname": "chaoxing-study-native"
+}

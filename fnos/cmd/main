@@ -1,0 +1,62 @@
+#!/bin/bash
+set -u
+umask 077
+: "${TRIM_APPDEST:?缺少飞牛应用路径}"
+: "${TRIM_PKGVAR:?缺少飞牛数据路径}"
+APP_DIR="${TRIM_APPDEST}/server"
+NODE="${TRIM_APPDEST}/runtime/bin/node"
+SERVER="${APP_DIR}/webui/fnos.mjs"
+SOCKET="${TRIM_APPDEST}/app.sock"
+DATA="${TRIM_PKGVAR}/data"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+LOG_FILE="${TRIM_PKGVAR}/app.log"
+mkdir -p "$DATA" || exit 1
+fail() {
+    printf '%s\n' "$1" >&2
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$1" > "$TRIM_TEMP_LOGFILE"; fi
+    exit 1
+}
+status_app() {
+    [ -r "$PID_FILE" ] || return 1
+    read -r pid < "$PID_FILE" || return 1
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null || return 1
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fqx -- "$SERVER"
+}
+health() {
+    "$NODE" --input-type=module -e 'import http from "node:http";const r=http.get({socketPath:process.argv[1],path:"/health"},s=>{s.resume();process.exitCode=s.statusCode===200?0:1});r.setTimeout(1500,()=>r.destroy());r.on("error",()=>process.exitCode=1);' "$SOCKET" >/dev/null 2>&1
+}
+stop_app() {
+    if ! status_app; then rm -f -- "$PID_FILE"; return 0; fi
+    kill -TERM "$pid" 2>/dev/null || return 1
+    for ((i=0;i<25;i++)); do
+        if ! status_app; then rm -f -- "$PID_FILE"; return 0; fi
+        sleep 1
+    done
+    if status_app; then kill -KILL "$pid" 2>/dev/null || return 1; fi
+    rm -f -- "$PID_FILE"
+}
+start_app() {
+    if status_app; then return 0; fi
+    case "$(uname -m)" in aarch64|arm64) ;; *) fail '此安装包仅支持 ARM64 飞牛。' ;; esac
+    [ -x "$NODE" ] || fail 'Node.js 运行时不可执行，请检查安装文件权限。'
+    "$NODE" -e 'if(process.arch!=="arm64"||Number(process.versions.node.split(".")[0])<22)process.exit(1)' >> "$LOG_FILE" 2>&1 || fail 'ARM64 Node.js 无法启动，请检查系统运行库兼容性。'
+    if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt 2097152 ]; then mv -f -- "$LOG_FILE" "$LOG_FILE.1"; fi
+    cd "$APP_DIR" || fail '应用源码目录不存在。'
+    (umask 022; exec nohup "$NODE" "$SERVER" --socket "$SOCKET" --data-dir "$DATA" </dev/null) >> "$LOG_FILE" 2>&1 &
+    printf '%s\n' "$!" > "$PID_FILE"
+    for ((i=0;i<15;i++)); do
+        sleep 1
+        if status_app && [ -S "$SOCKET" ] && health; then return 0; fi
+        if ! status_app; then fail '服务启动失败，请检查应用数据目录中的 app.log。'; fi
+    done
+    stop_app
+    fail '等待应用服务就绪超时，请检查 app.log。'
+}
+case "${1:-}" in
+    start) start_app ;;
+    stop) stop_app ;;
+    status) if status_app; then exit 0; else exit 3; fi ;;
+    *) fail '仅支持 start / stop / status。' ;;
+esac

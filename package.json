@@ -1,0 +1,17 @@
+{
+  "name": "chaoxing-study-native",
+  "version": "0.2.8",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "node webui/server.mjs --host 127.0.0.1 --port 3001"
+  },
+  "dependencies": {
+    "cheerio": "1.1.2",
+    "tough-cookie": "6.0.0"
+  }
+}

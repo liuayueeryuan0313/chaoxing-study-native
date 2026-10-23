@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>超星学习控制台 0.2.8 Native</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="icon-64.png?v=0.2.8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 顶栏导航与状态控制 -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <img class="brand-icon" src="icon-64.png?v=0.2.8" alt="学习通" width="24" height="24">
+        <span class="brand-title">超星学习控制台</span>
+        <span class="badge badge-subtle" id="appModeBadge">真实模式</span>
+        <button class="btn btn-sm btn-outline" id="btnToggleMode" title="点击切换：真实模式 / 离线模拟演示">切换模式</button>
+      </div>
+      <div class="connection-status" id="connectionStatus">
+        <span class="status-dot"></span>
+        <span class="status-text">连接中...</span>
+      </div>
+      <span class="badge badge-subtle nas-user-badge" id="nasUserBadge" hidden></span>
+    </div>
+
+    <div class="header-center">
+      <div class="phase-indicator" id="phaseIndicator">
+        <span class="phase-dot"></span>
+        <span class="phase-name" id="phaseName">空闲</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="control-group">
+        <div class="setting-item">
+          <label for="studyModeSelect">学习范围</label>
+          <select id="studyModeSelect" class="form-select">
+            <option value="all" selected>全部（视频 + 课件）</option>
+            <option value="video">仅视频</option>
+            <option value="document">仅课件（PDF等）</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label for="rateSelect">倍速</label>
+          <select id="rateSelect" class="form-select">
+            <option value="1">1.0x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2" selected>2.0x (推荐)</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <label for="maxTasksInput">任务上限</label>
+          <input type="number" id="maxTasksInput" class="form-input input-narrow" placeholder="不限" min="1">
+        </div>
+
+        <button id="btnInit" class="btn btn-secondary" title="打开扫码登录面板">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+          登录 / 初始化
+        </button>
+
+        <button id="btnVerification" class="btn btn-warning" hidden>处理平台验证</button>
+        <button id="btnStart" class="btn btn-primary" title="需要时自动扫描，再处理所选课程未完成视频和文档" disabled>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          开始学习
+        </button>
+
+        <button id="btnPause" class="btn btn-warning" title="暂停任务计时并提交当前进度" disabled>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          暂停
+        </button>
+
+        <button id="btnResume" class="btn btn-success" title="从暂停位置恢复学习" disabled>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          继续
+        </button>
+
+        <button id="btnStop" class="btn btn-danger" title="停止学习队列，下次以平台保存的断点续接" disabled>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="4" y="4" width="16" height="16"></rect></svg>
+          停止
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 提示条 / 异常提示 -->
+  <div id="alertBanner" class="alert-banner hidden">
+    <div class="alert-content">
+      <span class="alert-icon" id="alertIcon">⚠️</span>
+      <span class="alert-message" id="alertMessage"></span>
+    </div>
+    <button class="alert-close" id="alertClose">×</button>
+  </div>
+
+  <main class="app-main">
+    <!-- 顶部核心指标看板 -->
+    <section class="metrics-grid">
+      <!-- 指标 1：视频完成率 -->
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">任务完成率</span>
+          <span class="metric-sub" id="statVideoRatio">0 / 0</span>
+        </div>
+        <div class="metric-value-row">
+          <span class="metric-value" id="statCompletionPercent">--%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="statCompletionBar" style="width: 0%"></div>
+        </div>
+        <div class="metric-footer">
+          <span id="statCompletionHint">扫描章节后显示全部任务的确认状态</span>
+        </div>
+      </div>
+
+      <!-- 指标 2：时长加权流逝进度 -->
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">时长流逝进度</span>
+          <span class="metric-sub" id="statDurationRatio">--:-- / --:--</span>
+        </div>
+        <div class="metric-value-row">
+          <span class="metric-value" id="statMediaPercent">--%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar progress-bar-cyan" id="statMediaBar" style="width: 0%"></div>
+        </div>
+        <div class="metric-footer">
+          <span id="statMediaHint">扫描时读取视频时长和平台保存位置</span>
+        </div>
+      </div>
+
+      <!-- 指标 3：任务概况分流 -->
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">任务分类统计</span>
+        </div>
+        <div class="stats-pills">
+          <div class="stat-pill stat-passed">
+            <span class="stat-pill-label">已通过</span>
+            <span class="stat-pill-val" id="pillPassed">0</span>
+          </div>
+          <div class="stat-pill stat-pending">
+            <span class="stat-pill-label">待学习</span>
+            <span class="stat-pill-val" id="pillPending">0</span>
+          </div>
+          <div class="stat-pill stat-manual">
+            <span class="stat-pill-label">需手动</span>
+            <span class="stat-pill-val" id="pillManual" title="未适配的测验、考试等任务需人工处理">0</span>
+          </div>
+          <div class="stat-pill stat-failed">
+            <span class="stat-pill-label">失败</span>
+            <span class="stat-pill-val" id="pillFailed">0</span>
+          </div>
+          <div class="stat-pill stat-unverified">
+            <span class="stat-pill-label">待核对</span>
+            <span class="stat-pill-val" id="pillUnverified">0</span>
+          </div>
+        </div>
+        <div class="metric-footer">
+          <span id="statClassificationHint">各分类分别计数；参考资料不计入任务</span>
+        </div>
+      </div>
+
+      <!-- 指标 4：当前任务快照 -->
+      <div class="metric-card active-task-card">
+        <div class="metric-header">
+          <span class="metric-label">当前运行任务</span>
+          <span class="badge badge-accent" id="activeRateBadge">2.0x</span>
+        </div>
+        <div class="active-task-name" id="activeTaskTitle">无活跃视频</div>
+        <div class="active-task-time" id="activeTaskTime">--:-- / --:--</div>
+        <div class="progress-track">
+          <div class="progress-bar progress-bar-active" id="activeProgressBar" style="width: 0%"></div>
+        </div>
+        <div class="metric-footer">
+          <span id="activeTaskChapter">等待学习开始</span>
+            <div id="activeQuality" class="logs-hint">HTTP 协议运行 · 无浏览器 · 无视频解码</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 工作区主体：左侧选课 + 右侧章节任务树 -->
+    <div class="workspace-layout">
+      <!-- 左侧：课程列表 -->
+      <aside class="courses-sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title-row">
+            <h2 class="section-title">课程列表</h2>
+            <span class="badge" id="courseCountBadge">0 门</span>
+          </div>
+          <div class="sidebar-actions">
+            <button id="btnSelectAll" class="btn-text">全选</button>
+            <span class="divider">|</span>
+            <button id="btnDeselectAll" class="btn-text">清空</button>
+            <div class="flex-spacer"></div>
+            <button id="btnScan" class="btn btn-sm btn-outline" title="刷新目录并接着扫描未读取的小节；运行前复核服务端状态" disabled>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              扫描章节
+            </button>
+          </div>
+          <label class="btn-text" title="勾选后重新请求全部章节；默认保留成功断点以减少重复请求"><input type="checkbox" id="forceRescan"> 重新读取全部章节（默认断点续扫）</label>
+        </div>
+
+        <div class="courses-list" id="coursesList">
+          <div class="empty-state">
+            <p>尚未登录或未发现课程</p>
+            <span class="empty-hint">点击右上角“登录 / 初始化”开始</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧：章节与任务详情 -->
+      <section class="details-panel">
+        <div class="panel-toolbar">
+          <div class="filter-group">
+            <input type="text" id="taskSearchInput" class="form-input search-input" placeholder="搜索任务或章节名称...">
+            <div class="filter-radios">
+              <button class="filter-tab active" data-filter="all">全部</button>
+              <button class="filter-tab" data-filter="video">仅视频</button>
+              <button class="filter-tab" data-filter="document">课件</button>
+              <button class="filter-tab" data-filter="pending">待学习</button>
+              <button class="filter-tab" data-filter="manual">需手动</button>
+              <button class="filter-tab" data-filter="passed">已通过</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button id="btnExpandAll" class="btn-text">全部展开</button>
+            <span class="divider">|</span>
+            <button id="btnCollapseAll" class="btn-text">全部折叠</button>
+          </div>
+        </div>
+
+        <div class="tree-container" id="treeContainer">
+          <div class="empty-state">
+            <p>请在左侧勾选课程并点击“扫描章节”</p>
+            <span class="empty-hint">扫描后将展示每一课及其具体视频与文档任务</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 底部抽屉：实时日志与运行监控 -->
+    <section class="bottom-drawer" id="bottomDrawer">
+      <div class="drawer-header" id="drawerToggle">
+        <div class="drawer-title">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span>实时日志与运行监控</span>
+          <span class="log-count-pill" id="logCountPill">0 条</span>
+        </div>
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" data-tab="logs">事件日志</button>
+          <button class="drawer-tab" data-tab="vnc" id="vncTabBtn">扫码登录</button>
+          <button class="btn-icon drawer-collapse-btn" title="收起/展开" id="btnCollapseDrawer">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="drawer-body" id="drawerBody">
+        <!-- 选项卡 1：事件日志 -->
+        <div class="tab-pane active" id="tabLogs">
+          <div class="logs-toolbar">
+            <span class="logs-hint">实时记录：心跳上报、进度推进、暂停断点核验等关键事件（带令牌敏感信息已脱敏）</span>
+            <button id="btnClearLogs" class="btn-text">清屏</button>
+          </div>
+          <div class="log-stream" id="logStream"></div>
+        </div>
+
+        <!-- 选项卡 2：浏览器画面 / noVNC 视图 -->
+        <div class="tab-pane" id="tabVnc">
+          <div class="vnc-container">
+            <div class="vnc-bar">
+              <span class="vnc-tip">仅显示学习通二维码；后台任务由运行器独立处理</span>
+              <button id="btnRefreshVnc" class="btn btn-sm btn-secondary">打开登录面板</button>
+            </div>
+            <p class="logs-hint">无浏览器版默认 2×；无需视频画面和视频解码。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="loginDialog" class="login-dialog">
+    <div class="login-toolbar"><strong>学习通扫码登录</strong><button id="loginClose" class="btn btn-secondary">收起</button></div>
+    <p id="loginHint">正在检查本机会话…</p>
+    <p class="logs-hint">请在学习通 App 扫码并确认。</p>
+    <div class="login-image-wrap"><img id="loginImage" alt="等待二维码或登录页面" hidden draggable="false"></div>
+
+    <p>登录完成后自动关闭画面，同一运行会话无需重复扫码。</p>
+  </dialog>
+  <dialog id="verificationDialog" class="login-dialog">
+    <div class="login-toolbar"><strong>超星平台验证 · 9010</strong><button id="verificationClose" class="btn btn-secondary">收起</button></div>
+    <p id="verificationHint">请本人输入图片中的 4 位验证码，通过后自动从原位置继续，无需再次点击扫描或开始。</p>
+    <div class="verification-image-wrap"><img id="verificationImage" alt="等待平台验证码图片" hidden></div>
+    <form id="verificationForm">
+      <input id="verificationCode" class="form-input" type="text" maxlength="4" autocomplete="off" placeholder="本人输入 4 位验证码" required>
+      <button id="verificationSubmit" class="btn btn-primary" type="submit">提交验证</button>
+      <button id="verificationRefresh" class="btn btn-secondary" type="button">刷新图片</button>
+    </form>
+    <p class="logs-hint">这是平台图片验证，无需重新登录；程序不识别或猜测验证码。</p>
+  </dialog>
+  <script src="verification.js?v=0.2.8"></script>
+  <script src="login.js?v=0.2.8"></script>
+  <script src="native-client.js?v=0.2.8"></script>
+  <script src="app.js?v=0.2.8"></script>
+</body>
+</html>
